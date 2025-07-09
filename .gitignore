@@ -1,5 +1,3 @@
-# Archivos sensibles y secretos
-.streamlit/secrets.toml
 *.json
 
 # Virtualenv
