@@ -1,0 +1,25 @@
+# Archivos sensibles y secretos
+.streamlit/secrets.toml
+*.json
+
+# Virtualenv
+.venv/
+
+# Archivos de sistema
+.DS_Store
+Thumbs.db
+
+# Archivos temporales y de caché
+__pycache__/
+*.pyc
+*.log
+*.pkl
+*.tmp
+*.csv
+*.xlsx
+*.zip
+*.bak
+*.old
+
+# Carpetas generadas por IDEs
+.vscode/
