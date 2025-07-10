@@ -1,8 +1,6 @@
 import streamlit as st
 from google.oauth2.service_account import Credentials
 from google_auth_oauthlib.flow import Flow
-import os
-import pickle
 
 @st.cache_resource
 def get_credentials(scopes):
@@ -14,11 +12,6 @@ def get_credentials(scopes):
     except Exception as e:
         st.error(f"Error al cargar credenciales: {e}")
         return None
-
-def hash_password(password):
-    """Codifica la contraseña usando SHA-256"""
-    import hashlib
-    return hashlib.sha256(password.encode()).hexdigest()
 
 # --- Google OAuth2 Login ---
 def google_login():
