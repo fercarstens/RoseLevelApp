@@ -106,6 +106,7 @@ def render(movimientos_df, extractos_df):
             kpi_label = "Total Ingresos"
 
         if df_tipo.empty:
+
             st.warning(f"No hay {tipo_analisis.lower()} para analizar.")
         else:
             total = df_tipo["monto"].sum()
@@ -129,29 +130,30 @@ def render(movimientos_df, extractos_df):
                 }), use_container_width=True
             )
 
-            # Pie con “Otros”
-            pie_data = cat_summary.copy()
-            otros = pie_data[pie_data["Porcentaje"] < 4]["Total"].sum()
-            pie_data = pie_data[pie_data["Porcentaje"] >= 4]
-            if otros > 0:
-                pie_data.loc["Otros"] = [otros, pie_data["Cantidad"].sum(), 100 * otros / total]
-            fig, ax = plt.subplots(figsize=(5,5))
-            pie_data["Total"].plot.pie(
-                labels=pie_data.index,
-                autopct="%1.1f%%",
-                ax=ax,
-                startangle=140,
-                counterclock=False
-            )
-            ax.set_ylabel("")
-            st.pyplot(fig)
-
-            # Barras horizontal
-            fig2, ax2 = plt.subplots(figsize=(6,5))
-            cat_summary["Total"].plot.barh(ax=ax2)
-            ax2.set_xlabel("Monto ($)")
-            ax2.set_ylabel("Categoría")
-            st.pyplot(fig2)
+            # Mostrar gráficos en dos columnas y más pequeños
+            col_pie, col_bar = st.columns(2)
+            with col_pie:
+                pie_data = cat_summary.copy()
+                otros = pie_data[pie_data["Porcentaje"] < 4]["Total"].sum()
+                pie_data = pie_data[pie_data["Porcentaje"] >= 4]
+                if otros > 0:
+                    pie_data.loc["Otros"] = [otros, pie_data["Cantidad"].sum(), 100 * otros / total]
+                fig, ax = plt.subplots(figsize=(2.5,2.5))
+                pie_data["Total"].plot.pie(
+                    labels=pie_data.index,
+                    autopct="%1.1f%%",
+                    ax=ax,
+                    startangle=140,
+                    counterclock=False
+                )
+                ax.set_ylabel("")
+                st.pyplot(fig)
+            with col_bar:
+                fig2, ax2 = plt.subplots(figsize=(2.5,2.5))
+                cat_summary["Total"].plot.barh(ax=ax2)
+                ax2.set_xlabel("Monto ($)")
+                ax2.set_ylabel("Categoría")
+                st.pyplot(fig2)
 
             # Detalle interactivo
             st.markdown("---")
@@ -181,6 +183,15 @@ def render(movimientos_df, extractos_df):
             df_mes["mes"] = df_mes["fecha"].dt.strftime("%Y-%m")
             df_mensual = df_mes.groupby("mes")["monto"].sum()
             st.bar_chart(df_mensual)
+
+            # Mostrar todos los movimientos de la categoría seleccionada
+            st.markdown("---")
+            st.write(f"**Movimientos de la categoría '{categoria_selec}':**")
+            mostrar_cols = [col for col in ["fecha", "banco", "categoría", "descripción", "monto"] if col in df_detalle.columns]
+            df_mostrar = df_detalle.copy()
+            if "monto" in df_mostrar.columns:
+                df_mostrar["monto"] = df_mostrar["monto"].map("${:,.2f}".format)
+            st.dataframe(df_mostrar[mostrar_cols], use_container_width=True)
 
             # Exportar
             st.download_button(
@@ -333,71 +344,3 @@ def render(movimientos_df, extractos_df):
             )
         else:
             st.info("No hay extractos filtrados para exportar.")
-
-
-"""
-    with tab5:
-        st.subheader("Exportar Datos Completos")
-        col1, col2 = st.columns(2)
-        # Exportar ingresos
-        with col1:
-            st.write("**Exportar Ingresos**")
-            if not ingresos_filtrados.empty:
-                csv_data = ingresos_filtrados.to_csv(index=False).encode("utf-8")
-                st.download_button("📥 Descargar CSV", data=csv_data, file_name=f"ingresos_{fecha_desde}_{fecha_hasta}.csv", mime="text/csv")
-                output = io.BytesIO()
-                with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                    ingresos_filtrados.to_excel(writer, index=False)
-                st.download_button("📊 Descargar Excel", data=output.getvalue(), file_name=f"ingresos_{fecha_desde}_{fecha_hasta}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-            else:
-                st.info("No hay ingresos para exportar.")
-        # Exportar egresos
-        with col2:
-            st.write("**Exportar Egresos**")
-            if not egresos_filtrados.empty:
-                csv_data = egresos_filtrados.to_csv(index=False).encode("utf-8")
-                st.download_button("📥 Descargar CSV", data=csv_data, file_name=f"egresos_{fecha_desde}_{fecha_hasta}.csv", mime="text/csv")
-                output = io.BytesIO()
-                with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                    egresos_filtrados.to_excel(writer, index=False)
-                st.download_button("📊 Descargar Excel", data=output.getvalue(), file_name=f"egresos_{fecha_desde}_{fecha_hasta}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-            else:
-                st.info("No hay egresos para exportar.")
-
-        st.divider()
-        st.write("**Resumen Financiero PDF**")
-        if not ingresos_filtrados.empty or not egresos_filtrados.empty:
-            resumen = f'''Resumen Financiero
-Período: {fecha_desde} a {fecha_hasta}
-Ingresos totales: ${ingresos_filtrados['monto'].sum():,.2f}
-Egresos totales: ${egresos_filtrados['monto'].sum():,.2f}
-Balance: ${ingresos_filtrados['monto'].sum() - egresos_filtrados['monto'].sum():,.2f}
-'''
-            st.download_button(
-                "📄 Descargar Resumen (TXT)",
-                data=resumen.encode(),
-                file_name="resumen_financiero.txt",
-                mime="text/plain"
-            )
-            if st.button("📤 Subir Resumen PDF a Drive"):
-                try:
-                    buffer = io.BytesIO()
-                    p = canvas.Canvas(buffer)
-                    p.drawString(100, 800, "Resumen Financiero")
-                    p.drawString(100, 780, f"Período: {fecha_desde} a {fecha_hasta}")
-                    p.drawString(100, 760, f"Ingresos totales: ${ingresos_filtrados['monto'].sum():,.2f}")
-                    p.drawString(100, 740, f"Egresos totales: ${egresos_filtrados['monto'].sum():,.2f}")
-                    p.drawString(100, 720, f"Balance: ${ingresos_filtrados['monto'].sum() - egresos_filtrados['monto'].sum():,.2f}")
-                    # Puedes agregar detalles de extractos aquí si lo deseas
-                    p.save()
-                    pdf_data = buffer.getvalue()
-                    success, file_id = subir_a_drive(f"resumen_financiero_{fecha_desde}_{fecha_hasta}.pdf", pdf_data, "application/pdf")
-                    if success:
-                        st.success(f"Resumen PDF subido: [Abrir](https://drive.google.com/file/d/{file_id}/view)")
-                    else:
-                        st.error("Error al subir el archivo a Drive")
-                except Exception as e:
-                    st.error(f"Error al generar o subir el PDF: {str(e)}")
-        else:
-            st.info("No hay datos suficientes para generar resumen en PDF")
-"""

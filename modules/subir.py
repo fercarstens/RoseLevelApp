@@ -24,34 +24,54 @@ def render(movimientos_df):
             accept_multiple_files=True
         )
 
-        guardar_en_drive = st.checkbox("¿Guardar los archivos en Google Drive?", value=False)
-        folder_id = None
-        # Guardar en Drive (resumen)
+        guardar_en_drive = True
         drive_success = 0
         drive_errors = []
-        if guardar_en_drive and uploaded_files:
-            nombre_carpeta = f"Extractos_{datetime.datetime.now().strftime('%Y-%m-%d')}"
-            st.info(f"Se creará una carpeta en Drive llamada: {nombre_carpeta}")
-            ok, folder_id_or_msg = crear_carpeta_en_drive(nombre_carpeta)
-            if ok:
-                folder_id = folder_id_or_msg
-                st.success(f"Carpeta creada en Drive.")
+        folder_id = None
+        # Usar siempre la misma carpeta llamada "Extractos"
+        nombre_carpeta = "Extractos"
+        from modules.drive_utils import listar_pdfs_en_drive
+        # Buscar si ya existe la carpeta "Extractos" en la raíz/unidad compartida
+        drive_service = get_google_drive_service()
+        folder_id = None
+        if drive_service:
+            # Buscar carpeta con ese nombre
+            parent_id = st.secrets["google"]["drive_folder_id"]
+            query = f"'{parent_id}' in parents and mimeType='application/vnd.google-apps.folder' and name='{nombre_carpeta}' and trashed=false"
+            results = drive_service.files().list(q=query, fields="files(id, name)").execute()
+            folders = results.get('files', [])
+            if folders:
+                folder_id = folders[0]['id']
             else:
-                st.warning(f"No se pudo crear la carpeta en Drive: {folder_id_or_msg}")
-                guardar_en_drive = False
+                ok, folder_id_or_msg = crear_carpeta_en_drive(nombre_carpeta)
+                if ok:
+                    folder_id = folder_id_or_msg
+                else:
+                    st.warning(f"No se pudo crear la carpeta en Drive: {folder_id_or_msg}")
+                    guardar_en_drive = False
+        else:
+            st.warning("No se pudo conectar con Google Drive.")
+            guardar_en_drive = False
+
 
 
         if uploaded_files:
             movimientos_list = []
             extractos_list = []
             errores_archivos = []
+            # Obtener lista de PDFs ya existentes en la carpeta
+            pdfs_en_drive = listar_pdfs_en_drive(folder_id)
+            nombres_pdfs_drive = set(pdf['name'] for pdf in pdfs_en_drive)
             for uploaded_file in uploaded_files:
+                file_name = uploaded_file.name
+                if file_name in nombres_pdfs_drive:
+                    st.info(f"El archivo '{file_name}' ya existe en la carpeta de Drive y no será procesado para evitar duplicados.")
+                    continue
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
                     tmp_file.write(uploaded_file.getbuffer())
                     tmp_path = tmp_file.name
 
                 if guardar_en_drive and folder_id:
-                    file_name = f"Extracto_{uploaded_file.name}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
                     success, result = subir_a_drive(file_name, uploaded_file.getvalue(), 'application/pdf', folder_id=folder_id)
                     if success:
                         drive_success += 1
@@ -60,11 +80,11 @@ def render(movimientos_df):
 
                 # Procesar el PDF
                 with st.spinner(f"Procesando {uploaded_file.name} para detectar movimientos..."):
-                    df_movimientos, df_extractos, banco, _ = extract_data_from_pdf(tmp_path, filename=uploaded_file.name)
+                    df_movimientos, df_extractos, banco, _ = extract_data_from_pdf(tmp_path, filename=file_name)
                     if df_movimientos is None or df_extractos is None:
                         errores_archivos.append(uploaded_file.name)
                     else:
-                        df_movimientos["archivo"] = uploaded_file.name
+                        df_movimientos["archivo"] = file_name
                         movimientos_list.append(df_movimientos)
                         extractos_list.append(df_extractos)
 
@@ -103,8 +123,9 @@ def render(movimientos_df):
                 )
 
                 # --- Botón para anexar movimientos a la base de datos principal ---
-                st.subheader("Anexar movimientos a la base de datos principal")
-                if st.button("Anexar a base de datos"):
+                st.subheader("Anexar movimientos y extractos a la base de datos")
+                if st.button("Subir"):
+                    # Guardar movimientos
                     movimientos_df = load_movimientos_data()
                     ids_existentes = set(movimientos_df["id"]) if not movimientos_df.empty else set()
                     from modules.sheets_utils import generar_id_compuesto, get_google_sheets_client
@@ -114,36 +135,39 @@ def render(movimientos_df):
                         if id_mov not in ids_existentes:
                             data = row.to_dict()
                             nuevos.append(data)
-                    if nuevos:
-                        gc = get_google_sheets_client()
-                        sheet_id = st.secrets["google"]["spreadsheet_id"]
-                        sh = gc.open_by_key(sheet_id)
-                        worksheet = sh.worksheet("movimientos")
-                        df_actual = pd.DataFrame(worksheet.get_all_records())
-                        df_final = pd.concat([df_actual, pd.DataFrame(nuevos)], ignore_index=True)
-                        set_with_dataframe(worksheet, df_final)
-                        st.success(f"Guardados: {len(nuevos)} | Duplicados: {len(df_total_mov)-len(nuevos)} de {len(df_total_mov)} movimientos.")
-                    else:
-                        st.info("No hay movimientos nuevos para guardar.")
-                # --- Botón para anexar extractos a la base de datos de extractos (opcional) ---
-                st.subheader("Anexar extractos a la base de datos de extractos")
-                if st.button("Anexar extractos a base de datos"):
-                    from modules.sheets_utils import get_google_sheets_client
                     gc = get_google_sheets_client()
                     sheet_id = st.secrets["google"]["spreadsheet_id"]
                     sh = gc.open_by_key(sheet_id)
-                    worksheet = sh.worksheet("extractos")
-                    df_actual = pd.DataFrame(worksheet.get_all_records())
+                    # Guardar movimientos
+                    mov_guardados = 0
+                    mov_duplicados = 0
+                    if nuevos:
+                        worksheet_mov = sh.worksheet("movimientos")
+                        df_actual_mov = pd.DataFrame(worksheet_mov.get_all_records())
+                        df_final_mov = pd.concat([df_actual_mov, pd.DataFrame(nuevos)], ignore_index=True)
+                        set_with_dataframe(worksheet_mov, df_final_mov)
+                        mov_guardados = len(nuevos)
+                        mov_duplicados = len(df_total_mov) - mov_guardados
+                        st.success(f"Movimientos guardados: {mov_guardados} | Duplicados: {mov_duplicados} de {len(df_total_mov)} movimientos.")
+                    else:
+                        st.info("No hay movimientos nuevos para guardar.")
+
+                    # Guardar extractos
+                    worksheet_ext = sh.worksheet("extractos")
+                    df_actual_ext = pd.DataFrame(worksheet_ext.get_all_records())
                     nuevos_ext = []
-                    # Manejar si la hoja está vacía o no tiene la columna 'extracto_id'
-                    extracto_ids_existentes = set(df_actual["extracto_id"]) if "extracto_id" in df_actual.columns else set()
+                    extracto_ids_existentes = set(df_actual_ext["extracto_id"]) if "extracto_id" in df_actual_ext.columns else set()
                     for _, row in df_total_ext.iterrows():
                         if row.get("extracto_id") not in extracto_ids_existentes:
                             nuevos_ext.append(row.to_dict())
+                    ext_guardados = 0
+                    ext_duplicados = 0
                     if nuevos_ext:
-                        df_final = pd.concat([df_actual, pd.DataFrame(nuevos_ext)], ignore_index=True)
-                        set_with_dataframe(worksheet, df_final)
-                        st.success(f"Extractos guardados: {len(nuevos_ext)} | Duplicados: {len(df_total_ext)-len(nuevos_ext)} de {len(df_total_ext)} extractos.")
+                        df_final_ext = pd.concat([df_actual_ext, pd.DataFrame(nuevos_ext)], ignore_index=True)
+                        set_with_dataframe(worksheet_ext, df_final_ext)
+                        ext_guardados = len(nuevos_ext)
+                        ext_duplicados = len(df_total_ext) - ext_guardados
+                        st.success(f"Extractos guardados: {ext_guardados} | Duplicados: {ext_duplicados} de {len(df_total_ext)} extractos.")
                     else:
                         st.info("No hay extractos nuevos para guardar.")
             else:

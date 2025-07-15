@@ -19,7 +19,7 @@ def render(movimientos_df):
         (ingresos_df["fecha"] <= pd.Timestamp(fecha_hasta))
     ]
     # Mostrar tabla adaptable a columnas existentes
-    columnas_ingreso = ["fecha", "concepto", "descripcion", "monto", "referencia", "comprobante", "banco", "archivo", "balance"]
+    columnas_ingreso = ["fecha", "banco", "descripción", "categoría", "monto", "archivo"]
     for col in columnas_ingreso:
         if col not in filtered_df.columns:
             filtered_df[col] = ""

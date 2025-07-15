@@ -1,11 +1,16 @@
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
-import plotly.express as px
-from wordcloud import WordCloud, STOPWORDS
+
 
 def render(movimientos_df, extractos_df):
+
     st.title("📊 Dashboard Financiero")
+
+    # Validación: si no hay movimientos, mostrar mensaje y salir
+    if movimientos_df.empty:
+        st.info("No hay movimientos registrados en la base de datos.")
+        return
 
     # --- Limpieza y preparación ---
     movimientos_df = movimientos_df.copy()
@@ -79,13 +84,44 @@ def render(movimientos_df, extractos_df):
 
     resumen = df.groupby(['banco', 'tipo'])['monto'].sum().unstack(fill_value=0)
     if not resumen.empty:
-        fig, ax = plt.subplots(figsize=(8, 5))
-        resumen.plot(kind='bar', ax=ax)
-        ax.set_ylabel("Monto ($)")
-        ax.set_title("Ingresos y Egresos por Banco")
-        ax.grid(axis='y', linestyle='--', alpha=0.7)
-        ax.legend(title="Tipo de movimiento")
-        st.pyplot(fig)
+        col_graf, col_pie = st.columns([1,1])
+        with col_graf:
+            fig, ax = plt.subplots(figsize=(3, 2))  
+            resumen.plot(kind='bar', ax=ax)
+            ax.set_ylabel("Monto ($)", fontsize=8)
+            ax.set_title("Ingresos y Egresos por Banco", fontsize=10)
+            ax.tick_params(axis='x', labelsize=7)
+            ax.tick_params(axis='y', labelsize=7)
+            ax.grid(axis='y', linestyle='--', alpha=0.7)
+            ax.set_xlabel("")  # Quitar el label del eje x
+            # Leyenda debajo del eje x
+            ax.legend(
+                title="Tipo de movimiento",
+                fontsize=7,
+                title_fontsize=8,
+                loc='lower center',
+                bbox_to_anchor=(0.5, -0.65),  # Más abajo para no tapar las letras
+                ncol=len(resumen.columns)
+            )
+            st.pyplot(fig)
+        with col_pie:
+            # Pie chart de egresos por banco
+            egresos_banco = df[df['tipo'].str.lower() == 'egreso'].groupby('banco')['monto'].sum()
+            egresos_banco = egresos_banco[egresos_banco > 0]
+            if not egresos_banco.empty:
+                fig_pie, ax_pie = plt.subplots(figsize=(2.2, 2.2))
+                ax_pie.pie(
+                    egresos_banco,
+                    labels=egresos_banco.index,
+                    autopct='%1.1f%%',
+                    startangle=140,
+                    counterclock=False,
+                    textprops={'fontsize': 7}
+                )
+                ax_pie.set_title("Egresos por banco", fontsize=9)
+                st.pyplot(fig_pie)
+            else:
+                st.info("No hay egresos para mostrar por banco.")
     else:
         st.info("No hay datos para mostrar en esta sección.")
 
@@ -112,7 +148,7 @@ def render(movimientos_df, extractos_df):
     st.dataframe(tabla_saldos, use_container_width=True)
 
     st.divider()
-    st.subheader("Categorías donde más gastas (Egresos)")
+    st.subheader("Categorías con más gastos (Egresos)")
 
     egresos = df[df['tipo'].str.lower() == 'egreso']
 
@@ -134,34 +170,29 @@ def render(movimientos_df, extractos_df):
             data_torta["Otros"] = otros
 
         if not data_torta.empty:
-            fig2, ax2 = plt.subplots()
-            ax2.pie(
-                data_torta,
-                labels=data_torta.index,
-                autopct='%1.1f%%',
-                startangle=140,
-                counterclock=False
-            )
-            ax2.set_title("Distribución de egresos por categoría")
-            st.pyplot(fig2)
-        # --- Treemap de egresos por categoría ---
-        egresos_all_cats = (
-            egresos
-            .groupby('categoría')['monto']
-            .sum()
-            .reset_index()
-            .sort_values("monto", ascending=False)
-        )
-        if not egresos_all_cats.empty and egresos_all_cats['monto'].sum() > 0:
-            fig_tree = px.treemap(
-                egresos_all_cats,
-                path=['categoría'],
-                values='monto',
-                title="Treemap de Egresos por Categoría",
-                color='monto',
-                color_continuous_scale='RdBu'
-            )
-            st.plotly_chart(fig_tree, use_container_width=True)
+            col_pie, col_bar = st.columns([1,1])
+            with col_pie:
+                fig2, ax2 = plt.subplots(figsize=(2.2, 2.2))
+                ax2.pie(
+                    data_torta,
+                    labels=data_torta.index,
+                    autopct='%1.1f%%',
+                    startangle=140,
+                    counterclock=False,
+                    textprops={'fontsize': 7}
+                )
+                ax2.set_title("Distribución de egresos por categoría", fontsize=9)
+                st.pyplot(fig2)
+            with col_bar:
+                fig3, ax3 = plt.subplots(figsize=(2.2, 2.2))
+                data_bar = data_torta.sort_values(ascending=False)
+                data_bar.plot(kind='bar', ax=ax3, color='#ff6961')
+                ax3.set_ylabel("Monto ($)", fontsize=7)
+                ax3.set_xlabel("")
+                ax3.set_title("Egresos por categoría", fontsize=9)
+                ax3.tick_params(axis='x', labelsize=5, rotation=45)
+                ax3.tick_params(axis='y', labelsize=7)
+                st.pyplot(fig3)
         else:
             st.info("No hay suficientes egresos para mostrar el treemap.")
     else:
@@ -186,32 +217,9 @@ def render(movimientos_df, extractos_df):
             for i, (desc, cnt) in enumerate(top_desc.items(), 1):
                 st.write(f"{i}. {desc} ({cnt} veces)")
 
-    # --- Wordcloud (Nube de palabras) de descripciones ---
-    st.divider()
-    st.subheader("Nube de palabras de descripciones (Wordcloud)")
 
-    desc_text = " ".join(
-        df[df['descripción'].notna() & (df['descripción'] != '')]['descripción'].astype(str).tolist()
-    )
-    if desc_text.strip():
-        stopwords = set(STOPWORDS)
-        wc = WordCloud(
-            background_color='white',
-            max_words=50,
-            stopwords=stopwords,
-            width=800,
-            height=400,
-            colormap='tab20c'
-        ).generate(desc_text)
-        fig_wc, ax_wc = plt.subplots(figsize=(10, 5))
-        ax_wc.imshow(wc, interpolation='bilinear')
-        ax_wc.axis('off')
-        st.pyplot(fig_wc)
-    else:
-        st.info("No hay descripciones suficientes para generar una nube de palabras.")
-
-    # --- Últimos movimientos ---
     st.divider()
+
     st.subheader("Movimientos")
     ultimos = df.sort_values("fecha", ascending=False)
     ultimos['monto'] = ultimos['monto'].map("${:,.2f}".format)

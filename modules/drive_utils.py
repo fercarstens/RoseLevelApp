@@ -59,3 +59,20 @@ def subir_a_drive(nombre_archivo, contenido_bytes, mimetype, folder_id=None):
         return True, file.get("id")
     except Exception as e:
         return False, str(e)
+
+
+# Nueva función: listar archivos PDF en la carpeta de Drive
+def listar_pdfs_en_drive(folder_id=None):
+    """Devuelve una lista de archivos PDF en la carpeta de Drive configurada."""
+    try:
+        drive_service = get_google_drive_service()
+        if not drive_service:
+            return []
+        folder_id = folder_id or st.secrets["google"]["drive_folder_id"]
+        query = f"'{folder_id}' in parents and mimeType='application/pdf' and trashed=false"
+        results = drive_service.files().list(q=query, fields="files(id, name)").execute()
+        files = results.get('files', [])
+        return files
+    except Exception as e:
+        st.error(f"Error al listar PDFs en Drive: {e}")
+        return []
