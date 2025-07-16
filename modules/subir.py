@@ -19,10 +19,13 @@ def render(movimientos_df):
         st.caption("Sube uno o varios extractos bancarios en PDF para identificar automáticamente los gastos y clasificarlos por categoría")
 
         uploaded_files = st.file_uploader(
-            "Selecciona uno o varios archivos PDF de extractos bancarios", 
-            type="pdf", 
+            "Selecciona uno o varios archivos PDF de extractos bancarios",
+            type="pdf",
             accept_multiple_files=True
         )
+
+        if "processed_files" not in st.session_state:
+            st.session_state["processed_files"] = {}
 
         guardar_en_drive = True
         drive_success = 0
@@ -67,28 +70,34 @@ def render(movimientos_df):
                 if file_name in nombres_pdfs_drive:
                     st.info(f"El archivo '{file_name}' ya existe en la carpeta de Drive y no será procesado para evitar duplicados.")
                     continue
-                with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
-                    tmp_file.write(uploaded_file.getbuffer())
-                    tmp_path = tmp_file.name
 
-                if guardar_en_drive and folder_id:
-                    success, result = subir_a_drive(file_name, uploaded_file.getvalue(), 'application/pdf', folder_id=folder_id)
-                    if success:
-                        drive_success += 1
-                    else:
-                        drive_errors.append(f"{uploaded_file.name}: {result}")
+                if file_name in st.session_state["processed_files"]:
+                    df_movimientos, df_extractos = st.session_state["processed_files"][file_name]
+                    banco = None
+                else:
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
+                        tmp_file.write(uploaded_file.getbuffer())
+                        tmp_path = tmp_file.name
 
-                # Procesar el PDF
-                with st.spinner(f"Procesando {uploaded_file.name} para detectar movimientos..."):
-                    df_movimientos, df_extractos, banco, _ = extract_data_from_pdf(tmp_path, filename=file_name)
-                    if df_movimientos is None or df_extractos is None:
-                        errores_archivos.append(uploaded_file.name)
-                    else:
-                        df_movimientos["archivo"] = file_name
-                        movimientos_list.append(df_movimientos)
-                        extractos_list.append(df_extractos)
+                    if guardar_en_drive and folder_id:
+                        success, result = subir_a_drive(file_name, uploaded_file.getvalue(), 'application/pdf', folder_id=folder_id)
+                        if success:
+                            drive_success += 1
+                        else:
+                            drive_errors.append(f"{uploaded_file.name}: {result}")
 
-                Path(tmp_path).unlink()
+                    with st.spinner(f"Procesando {uploaded_file.name} para detectar movimientos..."):
+                        df_movimientos, df_extractos, banco, _ = extract_data_from_pdf(tmp_path, filename=file_name)
+                    Path(tmp_path).unlink()
+                    if df_movimientos is not None and df_extractos is not None:
+                        st.session_state["processed_files"][file_name] = (df_movimientos, df_extractos)
+
+                if df_movimientos is None or df_extractos is None:
+                    errores_archivos.append(uploaded_file.name)
+                    continue
+                df_movimientos["archivo"] = file_name
+                movimientos_list.append(df_movimientos)
+                extractos_list.append(df_extractos)
 
             # Mostrar resumen de subida a Drive
             if guardar_en_drive:

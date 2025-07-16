@@ -53,6 +53,12 @@ def init_session_state():
         st.session_state["temp_data"] = None
     if "oauth_state" not in st.session_state:
         st.session_state["oauth_state"] = None
+    if "movimientos_df" not in st.session_state:
+        st.session_state["movimientos_df"] = None
+    if "extractos_df" not in st.session_state:
+        st.session_state["extractos_df"] = None
+    if "processed_files" not in st.session_state:
+        st.session_state["processed_files"] = {}
 
 def logout():
     """Cierra la sesión del usuario"""
