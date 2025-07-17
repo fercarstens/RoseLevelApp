@@ -58,7 +58,7 @@ def init_session_state():
     if "extractos_df" not in st.session_state:
         st.session_state["extractos_df"] = None
     if "processed_files" not in st.session_state:
-        st.session_state["processed_files"] = {}
+        st.session_state["processed_files"] = set()
 
 def logout():
     """Cierra la sesión del usuario"""

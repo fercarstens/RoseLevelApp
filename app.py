@@ -35,7 +35,7 @@ else:
     st.sidebar.divider()
     if st.sidebar.button("🚪 Cerrar sesión"):
         logout()
-    if st.sidebar.button("🔄 Actualizar datos"):
+    if st.sidebar.button("🔁 Recargar datos"):
         refresh_data()
     movimientos_df, extractos_df = load_data()
     if movimientos_df.empty:
