@@ -3,8 +3,8 @@ import streamlit as st
 from modules.auth import (
     init_session_state, logout
 )
-from modules.sheets_utils import load_movimientos_data
 from modules import dashboard, ingresos, egresos, subir, reportes, configuracion, edicion, login, visor
+from modules.data_loader import load_data, refresh_data
 
 
 st.set_page_config(
@@ -35,22 +35,23 @@ else:
     st.sidebar.divider()
     if st.sidebar.button("🚪 Cerrar sesión"):
         logout()
-    movimientos_df = load_movimientos_data("movimientos")
-    extractos_df = load_movimientos_data("extractos")
+    if st.sidebar.button("🔄 Actualizar datos"):
+        refresh_data()
+    movimientos_df, extractos_df = load_data()
     if movimientos_df.empty:
         st.info("No hay movimientos registrados en la base de datos.")
     else:
         if menu == "📊 Dashboard":
-            dashboard.render(movimientos_df, extractos_df)
+            dashboard.render(st.session_state["movimientos_df"], st.session_state["extractos_df"])
         elif menu == "💰 Ingresos":
-            ingresos.render(movimientos_df)
+            ingresos.render(st.session_state["movimientos_df"])
         elif menu == "💸 Egresos":
-            egresos.render(movimientos_df)
+            egresos.render(st.session_state["movimientos_df"])
         elif menu == "📄 Subida de Extractos":
-            subir.render(movimientos_df)
+            subir.render(st.session_state["movimientos_df"])
         elif menu == "📑 Visor de PDFs":
-            visor.render(movimientos_df)
+            visor.render(st.session_state["movimientos_df"])
         elif menu == "📈 Reportes":
-            reportes.render(movimientos_df, extractos_df)
+            reportes.render(st.session_state["movimientos_df"], st.session_state["extractos_df"])
         elif menu == "📝 Edición Manual":
-            edicion.render(movimientos_df)
+            edicion.render(st.session_state["movimientos_df"])

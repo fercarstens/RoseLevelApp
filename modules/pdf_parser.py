@@ -1,5 +1,7 @@
 import pdfplumber
 import re
+import hashlib
+from pathlib import Path
 import streamlit as st
 
 import pandas as pd
@@ -49,6 +51,7 @@ def detectar_banco(texto, filename=None):
                     return nombre
         return "Desconocido"
 
+@st.cache_data(hash_funcs={Path: lambda p: hashlib.md5(Path(p).read_bytes()).hexdigest(), str: lambda p: hashlib.md5(Path(p).read_bytes()).hexdigest()})
 def extract_data_from_pdf(pdf_path, filename=None):
     """
     Extrae y estandariza los datos de un PDF bancario.
