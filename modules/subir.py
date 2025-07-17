@@ -11,6 +11,11 @@ from modules.sheets_utils import (
 )
 from modules.pdf_parser import extract_data_from_pdf
 from gspread_dataframe import set_with_dataframe
+import hashlib
+
+
+def get_file_hash(file):
+    return hashlib.md5(file.getvalue()).hexdigest()
 
 
 
@@ -25,7 +30,7 @@ def render(movimientos_df):
         )
 
         if "processed_files" not in st.session_state:
-            st.session_state["processed_files"] = {}
+            st.session_state["processed_files"] = set()
 
         guardar_en_drive = True
         drive_success = 0
@@ -67,30 +72,31 @@ def render(movimientos_df):
             nombres_pdfs_drive = set(pdf['name'] for pdf in pdfs_en_drive)
             for uploaded_file in uploaded_files:
                 file_name = uploaded_file.name
+                file_hash = get_file_hash(uploaded_file)
                 if file_name in nombres_pdfs_drive:
                     st.info(f"El archivo '{file_name}' ya existe en la carpeta de Drive y no será procesado para evitar duplicados.")
                     continue
 
-                if file_name in st.session_state["processed_files"]:
-                    df_movimientos, df_extractos = st.session_state["processed_files"][file_name]
-                    banco = None
-                else:
-                    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
-                        tmp_file.write(uploaded_file.getbuffer())
-                        tmp_path = tmp_file.name
+                if file_hash in st.session_state["processed_files"]:
+                    st.info(f"{file_name} ya fue procesado.")
+                    continue
 
-                    if guardar_en_drive and folder_id:
-                        success, result = subir_a_drive(file_name, uploaded_file.getvalue(), 'application/pdf', folder_id=folder_id)
-                        if success:
-                            drive_success += 1
-                        else:
-                            drive_errors.append(f"{uploaded_file.name}: {result}")
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
+                    tmp_file.write(uploaded_file.getbuffer())
+                    tmp_path = tmp_file.name
 
-                    with st.spinner(f"Procesando {uploaded_file.name} para detectar movimientos..."):
-                        df_movimientos, df_extractos, banco, _ = extract_data_from_pdf(tmp_path, filename=file_name)
-                    Path(tmp_path).unlink()
-                    if df_movimientos is not None and df_extractos is not None:
-                        st.session_state["processed_files"][file_name] = (df_movimientos, df_extractos)
+                if guardar_en_drive and folder_id:
+                    success, result = subir_a_drive(file_name, uploaded_file.getvalue(), 'application/pdf', folder_id=folder_id)
+                    if success:
+                        drive_success += 1
+                    else:
+                        drive_errors.append(f"{uploaded_file.name}: {result}")
+
+                with st.spinner(f"Procesando {uploaded_file.name} para detectar movimientos..."):
+                    df_movimientos, df_extractos, banco, _ = extract_data_from_pdf(tmp_path, filename=file_name)
+                Path(tmp_path).unlink()
+                if df_movimientos is not None and df_extractos is not None:
+                    st.session_state["processed_files"].add(file_hash)
 
                 if df_movimientos is None or df_extractos is None:
                     errores_archivos.append(uploaded_file.name)
