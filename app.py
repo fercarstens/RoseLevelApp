@@ -3,7 +3,7 @@ import streamlit as st
 from modules.auth import (
     init_session_state, logout
 )
-from modules import dashboard, ingresos, egresos, subir, reportes, configuracion, edicion, login, visor
+from modules import dashboard, ingresos, egresos, subir, reportes, configuracion, edicion, login, visor, subir_gemini
 from modules.data_loader import load_data, refresh_data
 
 
