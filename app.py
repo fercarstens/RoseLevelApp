@@ -49,6 +49,8 @@ else:
             egresos.render(st.session_state["movimientos_df"])
         elif menu == "📄 Subida de Extractos":
             subir.render(st.session_state["movimientos_df"])
+        elif menu == "📄 Subida de Extractos Gemini":
+            subir_gemini.render(st.session_state["movimientos_df"])
         elif menu == "📑 Visor de PDFs":
             visor.render(st.session_state["movimientos_df"])
         elif menu == "📈 Reportes":
