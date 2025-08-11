@@ -15,7 +15,7 @@ google-auth-httplib2==0.2.0
 google-api-core==2.25.0rc1
 httplib2==0.22.0
 proto-plus==1.26.1
-protobuf==6.31.1
+protobuf<=6.0.0
 requests==2.32.3
 requests-oauthlib==2.0.0
 python-dotenv==1.1.0
