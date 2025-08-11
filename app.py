@@ -27,6 +27,7 @@ else:
         "💰 Ingresos",
         "💸 Egresos",
         "📄 Subida de Extractos",
+        "📄 Subida de Extractos Gemini",
         "📑 Visor de PDFs",
         "📈 Reportes",
         "📝 Edición Manual",
